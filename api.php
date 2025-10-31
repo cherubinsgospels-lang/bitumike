@@ -2,15 +2,17 @@
 /**
  * UCB BUKAVU - ATTENDANCE SYSTEM API
  * Complete REST API for attendance management
- * Version: 2.0
- * Date: 2025-10-29
+ * Version: 2.1 (Environment Variable Support)
+ * Date: 2025-10-30
  */
 
+// Configuration des en-têtes CORS
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 header('Content-Type: application/json; charset=utf-8');
 
+// Gestion de la requête OPTIONS (pré-vol CORS)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
@@ -24,14 +26,21 @@ class Database {
     private $pdo;
 
     private function __construct() {
-        $host = 'localhost';
-        $dbname = 'ucb_attendance';
-        $username = 'root';
-        $password = '1234';
+        // Chargement des variables d'environnement avec valeurs par défaut
+        // Utilise l'opérateur de coalescence null (??) de PHP 7.0+ pour une meilleure lisibilité,
+        // remplace le ternaire ($x = condition ? 'val1' : 'val2';) par getenv('VAR') ?? 'default';
+        $host = getenv('DB_HOST') ?? '127.0.0.1';
+        $dbname = getenv('DB_NAME') ?? 'ucb';
+        $username = getenv('DB_USER') ?? 'root';
+        $password = getenv('DB_PASSWORD') ?? '';
+        $port = getenv('DB_PORT') ?? 3306; 
 
         try {
+            // Construction du DSN (Data Source Name) avec le port
+            $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4";
+            
             $this->pdo = new PDO(
-                "mysql:host=$host;dbname=$dbname;charset=utf8mb4",
+                $dsn,
                 $username,
                 $password,
                 [
@@ -41,8 +50,9 @@ class Database {
                 ]
             );
         } catch (PDOException $e) {
+            // En cas d'échec de connexion, arrête l'exécution et renvoie une erreur JSON
             http_response_code(500);
-            echo json_encode(['error' => 'Database connection failed', 'message' => $e->getMessage()]);
+            echo json_encode(['error' => 'Database connection failed', 'message' => $e->getMessage(), 'details' => "DSN: $dsn"]);
             exit();
         }
     }
@@ -88,7 +98,7 @@ class AuthController {
             // TEMPORARY DEBUG MODIFICATION: Affiche les mots de passe si la connexion échoue
             if (!$user || $password !== $user['password']) {
                 http_response_code(401);
-
+                
                 // Si l'utilisateur est trouvé mais le mot de passe ne correspond pas, renvoyez les valeurs
                 if ($user) {
                     echo json_encode([
@@ -389,7 +399,7 @@ class AttendanceController {
             $session = $stmt->fetch();
 
             $baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")
-                     . "://" . $_SERVER['HTTP_HOST'];
+                       . "://" . $_SERVER['HTTP_HOST'];
             $qrUrl = $baseUrl . "/scan?session_id=" . $sessionId . "&token=" . $token;
 
             http_response_code(201);
@@ -491,7 +501,7 @@ class AttendanceController {
         try {
             $stmt = $this->db->prepare("
                 SELECT p.*, u.matricule as student_matricule,
-                       CONCAT(u.nom, ' ', COALESCE(u.prenom, '')) as student_name
+                        CONCAT(u.nom, ' ', COALESCE(u.prenom, '')) as student_name
                 FROM presences p
                 INNER JOIN users u ON p.etudiant_id = u.id
                 WHERE p.session_id = ?
@@ -518,7 +528,7 @@ class AttendanceController {
         try {
             $stmt = $this->db->prepare("
                 SELECT p.*, s.expiration as session_expiration,
-                       c.titre as course_name, s.session_id
+                        c.titre as course_name, s.session_id
                 FROM presences p
                 INNER JOIN sessions s ON p.session_id = s.id
                 LEFT JOIN cours c ON s.cours_id = c.id
@@ -551,8 +561,8 @@ class AttendanceController {
 
             $stmt = $this->db->prepare("
                 SELECT p.*, u.matricule as student_matricule,
-                       CONCAT(u.nom, ' ', COALESCE(u.prenom, '')) as student_name,
-                       c.titre as course_name, s.salle
+                        CONCAT(u.nom, ' ', COALESCE(u.prenom, '')) as student_name,
+                        c.titre as course_name, s.salle
                 FROM presences p
                 INNER JOIN sessions s ON p.session_id = s.id
                 INNER JOIN users u ON p.etudiant_id = u.id
@@ -587,8 +597,8 @@ class AttendanceController {
         try {
             $stmt = $this->db->prepare("
                 SELECT p.*, u.matricule as student_matricule,
-                       CONCAT(u.nom, ' ', COALESCE(u.prenom, '')) as student_name,
-                       c.titre as course_name, s.salle, s.session_id
+                        CONCAT(u.nom, ' ', COALESCE(u.prenom, '')) as student_name,
+                        c.titre as course_name, s.salle, s.session_id
                 FROM presences p
                 INNER JOIN sessions s ON p.session_id = s.id
                 INNER JOIN users u ON p.etudiant_id = u.id
